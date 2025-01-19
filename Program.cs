@@ -50,12 +50,12 @@ public class Tree
         return error / (float)samples.Count;
     }
 
-    public Tree(List<Sample> samples, int maxDepth, int currentDepth = 1, bool verbose = false)
+    public Tree(List<Sample> samples, int maxDepth, int minLeafSize, int currentDepth = 1, bool verbose = false)
     {
         int inputCount = samples[0].input.Length;
         prediction = DeterminePrediction(samples);
         error = DetermineError(prediction, samples);
-        if (samples.Count <= 2 || currentDepth >= maxDepth)
+        if (samples.Count <= minLeafSize * 2 || currentDepth >= maxDepth)
         {
             inputIndex = null;
             inputValue = null;
@@ -91,7 +91,7 @@ public class Tree
                         rightSamples.Add(sample);
                     }
                 }
-                if (leftSamples.Count == 0 || rightSamples.Count == 0)
+                if (leftSamples.Count < minLeafSize || rightSamples.Count < minLeafSize)
                 {
                     continue;
                 }
@@ -135,8 +135,8 @@ public class Tree
                 rightSamples.Add(sample);
             }
         }
-        left = new Tree(leftSamples, maxDepth, currentDepth + 1, verbose);
-        right = new Tree(rightSamples, maxDepth, currentDepth + 1, verbose);
+        left = new Tree(leftSamples, maxDepth, minLeafSize, currentDepth + 1, verbose);
+        right = new Tree(rightSamples, maxDepth, minLeafSize, currentDepth + 1, verbose);
     }
 
     public float[] Predict(float[] input)
@@ -212,6 +212,56 @@ public class Tree
     }
 }
 
+public class ResidualTrees
+{
+    public List<Tree> trees;
+    public List<Sample> residuals;
+    public float learningRate;
+    public int maxDepth;
+    public int minLeafSize;
+
+    public ResidualTrees(List<Sample> samples, float learningRate, int maxDepth, int minLeafSize, bool verbose = false)
+    {
+        trees = new List<Tree>();
+        residuals = new List<Sample>(samples);
+        this.learningRate = learningRate;
+        this.maxDepth = maxDepth;
+        this.minLeafSize = minLeafSize;
+    }
+
+    public void AddTree(bool verbose = false)
+    {
+        Tree tree = new Tree(residuals, maxDepth, minLeafSize, verbose: verbose);
+        trees.Add(tree);
+        List<Sample> newResiduals = new List<Sample>(residuals.Count);
+        foreach (Sample residual in residuals)
+        {
+            float[] prediction = tree.Predict(residual.input);
+            float[] residualOutput = new float[residual.output.Length];
+            for (int outputIndex = 0; outputIndex < residualOutput.Length; outputIndex++)
+            {
+                residualOutput[outputIndex] = residual.output[outputIndex] - (prediction[outputIndex] * learningRate);
+            }
+            newResiduals.Add(new Sample(residual.input, residualOutput));
+        }
+        residuals = newResiduals;
+    }
+
+    public float[] Predict(float[] input)
+    {
+        float[] prediction = new float[residuals[0].output.Length];
+        foreach (Tree tree in trees)
+        {
+            float[] treePrediction = tree.Predict(input);
+            for (int outputIndex = 0; outputIndex < prediction.Length; outputIndex++)
+            {
+                prediction[outputIndex] += treePrediction[outputIndex] * learningRate;
+            }
+        }
+        return prediction;
+    }
+}
+
 public class Program
 {
     public static List<Sample> ReadMNIST(string filename, int max = -1)
@@ -280,45 +330,49 @@ public class Program
         List<Sample> validate = samples.Skip(1000).ToList();
 
         TextWriter log = new StreamWriter("log.csv");
-        log.WriteLine("maxDepth,train,validate");
+        log.WriteLine("minLeafSize,trees,argmax,mae");
         object logLock = new object();
 
-        List<int> maxDepths = new List<int>();
-        for (int maxDepth = 0; maxDepth < 25; maxDepth++)
+        int maxTrees = 100;
+        float learningRate = 0.05f;
+
+        List<int> minLeafSizes = new List<int>();
+        for (int minLeafSize = 1; minLeafSize < 100; minLeafSize++)
         {
-            maxDepths.Add(maxDepth);
+            minLeafSizes.Add(minLeafSize);
         }
 
-        Parallel.ForEach(maxDepths, maxDepth =>
+        Parallel.ForEach(minLeafSizes, minLeafSize =>
         {
-            Tree tree = new Tree(train, maxDepth);
+            ResidualTrees residualTrees = new ResidualTrees(train, learningRate, int.MaxValue, minLeafSize);
+            for (int treeIndex = 0; treeIndex < maxTrees; treeIndex++)
+            {
+                residualTrees.AddTree();
 
-            int argmaxTrain = 0;
-            int argmaxValidate = 0;
-            foreach (Sample sample in train)
-            {
-                int predictionArgmax = Argmax(tree.Predict(sample.input));
-                int sampleArgmax = Argmax(sample.output);
-                if (predictionArgmax == sampleArgmax)
+                int argmaxValidate = 0;
+                float maeValidate = 0f;
+                foreach (Sample sample in validate)
                 {
-                    argmaxTrain++;
+                    float[] prediction = residualTrees.Predict(sample.input);
+                    int predictionArgmax = Argmax(prediction);
+                    int sampleArgmax = Argmax(sample.output);
+                    if (predictionArgmax == sampleArgmax)
+                    {
+                        argmaxValidate++;
+                    }
+                    for (int outputIndex = 0; outputIndex < prediction.Length; outputIndex++)
+                    {
+                        maeValidate += MathF.Abs(prediction[outputIndex] - sample.output[outputIndex]);
+                    }
                 }
-            }
-            foreach (Sample sample in validate)
-            {
-                int predictionArgmax = Argmax(tree.Predict(sample.input));
-                int sampleArgmax = Argmax(sample.output);
-                if (predictionArgmax == sampleArgmax)
-                {
-                    argmaxValidate++;
-                }
-            }
+                maeValidate /= (float)validate.Count;
 
-            lock (logLock)
-            {
-                Console.WriteLine($"MAXDEPTH: {maxDepth}, TRAIN: {argmaxTrain}, VALIDATE: {argmaxValidate}");
-                log.WriteLine($"{maxDepth},{argmaxTrain},{argmaxValidate}");
-                log.Flush();
+                lock (logLock)
+                {
+                    Console.WriteLine($"MINLEAFSIZE: {minLeafSize}, TREES: {treeIndex + 1}, ARGMAX: {residualTrees}, MAE: {maeValidate}");
+                    log.WriteLine($"{minLeafSize},{treeIndex + 1},{argmaxValidate},{maeValidate}");
+                    log.Flush();
+                }
             }
         });
     }

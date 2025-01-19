@@ -214,6 +214,7 @@ public class Tree
 
 public class ResidualTrees
 {
+    public float[] initialPrediction;
     public List<Tree> trees;
     public List<Sample> residuals;
     public float learningRate;
@@ -222,8 +223,29 @@ public class ResidualTrees
 
     public ResidualTrees(List<Sample> samples, float learningRate, int maxDepth, int minLeafSize, bool verbose = false)
     {
+        initialPrediction = new float[samples[0].output.Length];
+        foreach (Sample sample in samples)
+        {
+            for (int outputIndex = 0; outputIndex < initialPrediction.Length; outputIndex++)
+            {
+                initialPrediction[outputIndex] += sample.output[outputIndex];
+            }
+        }
+        for (int outputIndex = 0; outputIndex < initialPrediction.Length; outputIndex++)
+        {
+            initialPrediction[outputIndex] /= (float)samples.Count;
+        }
         trees = new List<Tree>();
-        residuals = new List<Sample>(samples);
+        residuals = new List<Sample>(samples.Count);
+        foreach (Sample sample in samples)
+        {
+            float[] residualOutput = new float[sample.output.Length];
+            for (int outputIndex = 0; outputIndex < residualOutput.Length; outputIndex++)
+            {
+                residualOutput[outputIndex] = sample.output[outputIndex] - initialPrediction[outputIndex];
+            }
+            residuals.Add(new Sample(sample.input, residualOutput));
+        }
         this.learningRate = learningRate;
         this.maxDepth = maxDepth;
         this.minLeafSize = minLeafSize;
@@ -250,6 +272,7 @@ public class ResidualTrees
     public float[] Predict(float[] input)
     {
         float[] prediction = new float[residuals[0].output.Length];
+        Array.Copy(initialPrediction, prediction, prediction.Length);
         foreach (Tree tree in trees)
         {
             float[] treePrediction = tree.Predict(input);
@@ -337,7 +360,7 @@ public class Program
         float learningRate = 0.05f;
 
         List<int> minLeafSizes = new List<int>();
-        for (int minLeafSize = 1; minLeafSize < 100; minLeafSize++)
+        for (int minLeafSize = 1; minLeafSize < 10; minLeafSize++)
         {
             minLeafSizes.Add(minLeafSize);
         }
@@ -365,7 +388,7 @@ public class Program
                         maeValidate += MathF.Abs(prediction[outputIndex] - sample.output[outputIndex]);
                     }
                 }
-                maeValidate /= (float)validate.Count;
+                maeValidate /= ((float)validate.Count * (float)samples[0].output.Length);
 
                 lock (logLock)
                 {

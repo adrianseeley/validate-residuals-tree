@@ -12,7 +12,6 @@
 
 public class Tree
 {
-    public delegate float ErrorFunction(float[] prediction, List<Sample> samples);
     public float[] prediction;
     public float error;
     public int? inputIndex;
@@ -38,12 +37,25 @@ public class Tree
         return prediction;
     }
 
-    public Tree(List<Sample> samples, ErrorFunction errorFunction)
+    private static float DetermineError(float[] prediction, List<Sample> samples)
+    {
+        float error = 0f;
+        foreach (Sample sample in samples)
+        {
+            for (int outputIndex = 0; outputIndex < prediction.Length; outputIndex++)
+            {
+                error += MathF.Abs(sample.output[outputIndex] - prediction[outputIndex]);
+            }
+        }
+        return error / (float)samples.Count;
+    }
+
+    public Tree(List<Sample> samples, int maxDepth, int currentDepth = 1, bool verbose = false)
     {
         int inputCount = samples[0].input.Length;
         prediction = DeterminePrediction(samples);
-        error = errorFunction(prediction, samples);
-        if (samples.Count <= 2)
+        error = DetermineError(prediction, samples);
+        if (samples.Count <= 2 || currentDepth >= maxDepth)
         {
             inputIndex = null;
             inputValue = null;
@@ -61,6 +73,10 @@ public class Tree
             List<float> inputValues = samples.Select(sample => sample.input[inputIndex]).Distinct().OrderBy(value => value).ToList();
             for (int valueIndex = 0; valueIndex < inputValues.Count - 1; valueIndex++)
             {
+                if (verbose)
+                {
+                    Console.Write($"\rSamples: {samples.Count} Index: {inputIndex + 1}/{inputCount}");
+                }
                 float inputValue = (inputValues[valueIndex] + inputValues[valueIndex + 1]) / 2;
                 leftSamples.Clear();
                 rightSamples.Clear();
@@ -79,8 +95,8 @@ public class Tree
                 {
                     continue;
                 }
-                float leftError = errorFunction(DeterminePrediction(leftSamples), leftSamples);
-                float rightError = errorFunction(DeterminePrediction(rightSamples), rightSamples);
+                float leftError = DetermineError(DeterminePrediction(leftSamples), leftSamples);
+                float rightError = DetermineError(DeterminePrediction(rightSamples), rightSamples);
                 float leftWeight = (float)leftSamples.Count / (float)samples.Count;
                 float rightWeight = (float)rightSamples.Count / (float)samples.Count;
                 float splitError = (leftWeight * leftError) + (rightWeight * rightError);
@@ -91,6 +107,10 @@ public class Tree
                     bestSplitError = splitError;
                 }
             }
+        }
+        if (verbose)
+        {
+            Console.WriteLine();
         }
         if (bestInputIndex == -1)
         {
@@ -115,8 +135,8 @@ public class Tree
                 rightSamples.Add(sample);
             }
         }
-        left = new Tree(leftSamples, errorFunction);
-        right = new Tree(rightSamples, errorFunction);
+        left = new Tree(leftSamples, maxDepth, currentDepth + 1, verbose);
+        right = new Tree(rightSamples, maxDepth, currentDepth + 1, verbose);
     }
 
     public float[] Predict(float[] input)
@@ -137,6 +157,58 @@ public class Tree
         {
             return right.Predict(input);
         }
+    }
+
+    public float Prune(List<Sample> validationSamples)
+    {
+        float validationError = DetermineError(prediction, validationSamples);
+        if (inputIndex == null || inputValue == null)
+        {
+            return validationError;
+        }
+        if (left == null || right == null)
+        {
+            throw new Exception("Invalid tree");
+        }
+        List<Sample> leftValidationSamples = new List<Sample>();
+        List<Sample> rightValidationSamples = new List<Sample>();
+        foreach (Sample validationSample in validationSamples)
+        {
+            if (validationSample.input[inputIndex.Value] < inputValue.Value)
+            {
+                leftValidationSamples.Add(validationSample);
+            }
+            else
+            {
+                rightValidationSamples.Add(validationSample);
+            }
+        }
+
+        // if we dont use the whole split, prune
+        if (leftValidationSamples.Count == 0 || rightValidationSamples.Count == 0)
+        {
+            inputIndex = null;
+            inputValue = null;
+            left = null;
+            right = null;
+            return validationError;
+        }
+
+        float leftValidationError = left.Prune(leftValidationSamples);
+        float rightValidationError = right.Prune(rightValidationSamples);
+        float leftWeight = (float)leftValidationSamples.Count / (float)validationSamples.Count;
+        float rightWeight = (float)rightValidationSamples.Count / (float)validationSamples.Count;
+        float jointValidationError = (leftWeight * leftValidationError) + (rightWeight * rightValidationError);
+        
+        // if error gets worse after split, prune
+        if (jointValidationError >= validationError)
+        {
+            inputIndex = null;
+            inputValue = null;
+            left = null;
+            right = null;
+        }
+        return validationError;
     }
 }
 
@@ -206,29 +278,48 @@ public class Program
         List<Sample> samples = ReadMNIST("d:/data/mnist_train.csv", max: 2000);
         List<Sample> train = samples.Take(1000).ToList();
         List<Sample> validate = samples.Skip(1000).ToList();
-        Tree tree = new Tree(train, ArgmaxError);
 
-        int trainCorrect = 0;
-        int validateCorrect = 0;
-        foreach (Sample sample in train)
+        TextWriter log = new StreamWriter("log.csv");
+        log.WriteLine("maxDepth,train,validate");
+        object logLock = new object();
+
+        List<int> maxDepths = new List<int>();
+        for (int maxDepth = 0; maxDepth < 25; maxDepth++)
         {
-            int predictionArgmax = Argmax(tree.Predict(sample.input));
-            int sampleArgmax = Argmax(sample.output);
-            if (predictionArgmax == sampleArgmax)
-            {
-                trainCorrect++;
-            }
+            maxDepths.Add(maxDepth);
         }
-        foreach (Sample sample in validate)
+
+        Parallel.ForEach(maxDepths, maxDepth =>
         {
-            int predictionArgmax = Argmax(tree.Predict(sample.input));
-            int sampleArgmax = Argmax(sample.output);
-            if (predictionArgmax == sampleArgmax)
+            Tree tree = new Tree(train, maxDepth);
+
+            int argmaxTrain = 0;
+            int argmaxValidate = 0;
+            foreach (Sample sample in train)
             {
-                validateCorrect++;
+                int predictionArgmax = Argmax(tree.Predict(sample.input));
+                int sampleArgmax = Argmax(sample.output);
+                if (predictionArgmax == sampleArgmax)
+                {
+                    argmaxTrain++;
+                }
             }
-        }
-        Console.WriteLine("Train accuracy: " + ((float)trainCorrect / (float)train.Count) + " (" + trainCorrect + " / " + train.Count + ")");
-        Console.WriteLine("Validate accuracy: " + ((float)validateCorrect / (float)validate.Count) + " (" + validateCorrect + " / " + validate.Count + ")");
+            foreach (Sample sample in validate)
+            {
+                int predictionArgmax = Argmax(tree.Predict(sample.input));
+                int sampleArgmax = Argmax(sample.output);
+                if (predictionArgmax == sampleArgmax)
+                {
+                    argmaxValidate++;
+                }
+            }
+
+            lock (logLock)
+            {
+                Console.WriteLine($"MAXDEPTH: {maxDepth}, TRAIN: {argmaxTrain}, VALIDATE: {argmaxValidate}");
+                log.WriteLine($"{maxDepth},{argmaxTrain},{argmaxValidate}");
+                log.Flush();
+            }
+        });
     }
 }

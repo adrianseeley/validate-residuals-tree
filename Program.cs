@@ -235,8 +235,9 @@ public class RandomTree : Tree
         foreach (int inputIndex in inputIndices)
         {
             List<float> inputValues = samples.Select(sample => sample.input[inputIndex]).Distinct().OrderBy(i => random.NextSingle()).ToList();
-            foreach(float inputValue in inputValues)
+            for (int inputValueIndex = 0; inputValueIndex < inputValues.Count - 1; inputValueIndex++)
             {
+                float inputValue = (inputValues[inputValueIndex] + inputValues[inputValueIndex + 1]) / 2;
                 leftSamples.Clear();
                 rightSamples.Clear();
                 foreach (Sample sample in samples)
@@ -267,8 +268,7 @@ public class RandomTree : Tree
 public class ResidualTrees
 {
     public Random random;
-    public int inputCount;
-    public int outputCount;
+    public List<Sample> residuals;
     public List<Tree> trees;
     public float learningRate;
     public float subsampleFraction;
@@ -276,11 +276,10 @@ public class ResidualTrees
     public int minLeafSize;
     public Type treeType;
 
-    public ResidualTrees(int inputCount, int outputCount, float learningRate, float subsampleFraction, int maxDepth, int minLeafSize, Type treeType)
+    public ResidualTrees(List<Sample> samples, float learningRate, float subsampleFraction, int maxDepth, int minLeafSize, Type treeType)
     {
         this.random = new Random();
-        this.inputCount = inputCount;
-        this.outputCount = outputCount;
+        this.residuals = new List<Sample>(samples);
         this.trees = new List<Tree>();
         this.learningRate = learningRate;
         this.subsampleFraction = subsampleFraction;
@@ -289,46 +288,43 @@ public class ResidualTrees
         this.treeType = treeType;
     }
 
-    public void AddTree(List<Sample> samples)
+    public void AddTree()
     {
-        // resample
-        List<Sample> resampled = samples.OrderBy(sample => random.NextSingle()).Take((int)((float)samples.Count * subsampleFraction)).ToList();
+        // take a fractional subsample of residuals
+        List<Sample> residualsFraction = residuals.OrderBy(sample => random.NextSingle()).Take((int)((float)residuals.Count * subsampleFraction)).ToList();
 
-        // compute up to the current tree worth of residuals
-        List<Sample> residuals = new List<Sample>(resampled);
-        foreach(Tree tree in trees)
-        {
-            for (int residualIndex = 0; residualIndex < residuals.Count; residualIndex++)
-            {
-                Sample residual = residuals[residualIndex];
-                float[] prediction = tree.Predict(residual.input);
-                float[] residualOutput = new float[outputCount];
-                for (int outputIndex = 0; outputIndex < outputCount; outputIndex++)
-                {
-                    residualOutput[outputIndex] = residual.output[outputIndex] - (prediction[outputIndex] * learningRate);
-                }
-                residuals[residualIndex] = new Sample(residual.input, residualOutput);
-            }
-        }
-
-        // add a new tree
+        // add a new tree using the fraction
         if (treeType == typeof(OptimalTree))
         {
-            trees.Add(new OptimalTree(residuals, maxDepth, minLeafSize));
+            trees.Add(new OptimalTree(residualsFraction, maxDepth, minLeafSize));
         }
         else if (treeType == typeof(RandomTree))
         {
-            trees.Add(new RandomTree(residuals, maxDepth, minLeafSize));
+            trees.Add(new RandomTree(residualsFraction, maxDepth, minLeafSize));
         }
         else
         {
             throw new Exception("Invalid tree type");
         }
+
+        // update residuals
+        Tree lastTree = trees.Last();
+        for (int residualIndex = 0; residualIndex < residuals.Count; residualIndex++)
+        {
+            Sample residual = residuals[residualIndex];
+            float[] prediction = lastTree.Predict(residual.input);
+            float[] residualOutput = new float[residuals[0].output.Length];
+            for (int outputIndex = 0; outputIndex < residuals[0].output.Length; outputIndex++)
+            {
+                residualOutput[outputIndex] = residual.output[outputIndex] - (prediction[outputIndex] * learningRate);
+            }
+            residuals[residualIndex] = new Sample(residual.input, residualOutput);
+        }
     }
 
     public float[] Predict(float[] input)
     {
-        float[] prediction = new float[outputCount];
+        float[] prediction = new float[residuals[0].output.Length];
         foreach (Tree tree in trees)
         {
             float[] treePrediction = tree.Predict(input);

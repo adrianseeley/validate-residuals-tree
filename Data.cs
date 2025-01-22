@@ -368,4 +368,29 @@ public static class Data
         }
         return samples;
     }
+
+    public static List<Sample> MNIST(string filename)
+    {
+        List<Sample> samples = new List<Sample>();
+        string[] lines = File.ReadAllLines(filename);
+        for (int lineIndex = 1; lineIndex < lines.Length; lineIndex++)
+        {
+            string line = lines[lineIndex].Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+            string[] parts = line.Split(',');
+            int labelInt = int.Parse(parts[0]);
+            double[] labelOneHot = new double[10];
+            labelOneHot[labelInt] = 1;
+            double[] input = new double[parts.Length - 1];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                input[i - 1] = double.Parse(parts[i]) / 255f;
+            }
+            samples.Add(new Sample(input, labelOneHot));
+        }
+        return samples;
+    }
 }

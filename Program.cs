@@ -1,9 +1,9 @@
 ﻿public class Sample
 {
-    public float[] input;
-    public float[] output;
+    public double[] input;
+    public double[] output;
 
-    public Sample(float[] input, float[] output)
+    public Sample(double[] input, double[] output)
     {
         this.input = input;
         this.output = output;
@@ -434,7 +434,7 @@ public class Program
             float weightSum = 0f;
 
             // iterate through neighbours
-            foreach((Sample trainSample, float distance) kNeighbour in kNeighbours)
+            foreach ((Sample trainSample, float distance) kNeighbour in kNeighbours)
             {
                 // calculate the weight of this neighbour
                 float weight = 1f - (kNeighbour.distance / maxDistance);
@@ -477,7 +477,7 @@ public class Program
         float subsampleFraction = 0.05f;
         int minLeafSize = 1;
         int maxDepth = int.MaxValue;
-       
+
         ResidualTrees residualTrees = new ResidualTrees(train, learningRate, subsampleFraction, maxDepth, minLeafSize, typeof(RandomTree));
 
         for (int treeIndex = 0; treeIndex < maxTrees; treeIndex++)

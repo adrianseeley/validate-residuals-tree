@@ -401,8 +401,8 @@ public class Program
     public static List<float[]> KNN(List<Sample> train, float[] testInput, int maxK, float exponent)
     {
         // find neighbours
-        List<(Sample trainSample, float distance)> neighbours = new List<(Sample trainSample, float distance)>();
-        for (int trainIndex = 0; trainIndex < train.Count; trainIndex++)
+        (Sample trainSample, float distance)[] neighboursArray = new (Sample trainSample, float distance)[train.Count];
+        Parallel.For(0, train.Count, trainIndex =>
         {
             float[] trainInput = train[trainIndex].input;
             float distance = 0f;
@@ -411,10 +411,11 @@ public class Program
                 distance += MathF.Pow(MathF.Abs(trainInput[i] - testInput[i]), exponent);
             }
             distance = MathF.Pow(distance, 1f / exponent);
-            neighbours.Add((train[trainIndex], distance));
-        }
+            neighboursArray[trainIndex] = (train[trainIndex], distance);
+        });
 
         // sort near to far
+        List<(Sample trainSample, float distance)> neighbours = neighboursArray.ToList();
         neighbours.Sort((a, b) => a.distance.CompareTo(b.distance));
 
         // create results
@@ -427,17 +428,17 @@ public class Program
             List<(Sample trainSample, float distance)> kNeighbours = neighbours.Take(k).ToList();
 
             // find the max distance of the neighbours
-            float maxDistance = kNeighbours.Max(neighbour => neighbour.distance) + 0.000001f; // epsilon prevents /0 and only 0 weights
+            double maxDistance = kNeighbours.Max(neighbour => neighbour.distance) + 0.000001; // epsilon prevents /0 and only 0 weights
 
             // create the result and weight sum
             float[] result = new float[train[0].output.Length];
-            float weightSum = 0f;
+            double weightSum = 0f;
 
             // iterate through neighbours
             foreach((Sample trainSample, float distance) kNeighbour in kNeighbours)
             {
                 // calculate the weight of this neighbour
-                float weight = 1f - (kNeighbour.distance / maxDistance);
+                double weight = 1 - (kNeighbour.distance / maxDistance);
 
                 // add to weight sum
                 weightSum += weight;
@@ -445,14 +446,14 @@ public class Program
                 // add to result
                 for (int i = 0; i < result.Length; i++)
                 {
-                    result[i] += kNeighbour.trainSample.output[i] * weight;
+                    result[i] += kNeighbour.trainSample.output[i] * (float)weight;
                 }
             }
 
             // weighted average result
             for (int i = 0; i < result.Length; i++)
             {
-                result[i] /= weightSum;
+                result[i] /= (float)weightSum;
             }
 
             // add to results
@@ -469,65 +470,45 @@ public class Program
         List<Sample> test = ReadMNIST("d:/data/mnist_test.csv", max: -1);
 
         TextWriter log = new StreamWriter("log.csv");
-        log.WriteLine("trees,testArgmax,testMae,trainArgmax,trainMae");
-        object logLock = new object();
+        log.WriteLine("k,exponent,argmax,mae");
+        log.Flush();
 
-        int maxTrees = 100000;
-        float learningRate = 0.001f;
-        float subsampleFraction = 0.05f;
-        int minLeafSize = 1;
-        int maxDepth = int.MaxValue;
-       
-        ResidualTrees residualTrees = new ResidualTrees(train, learningRate, subsampleFraction, maxDepth, minLeafSize, typeof(RandomTree));
-
-        for (int treeIndex = 0; treeIndex < maxTrees; treeIndex++)
+        int maxK = 100;
+        for (float exponent = 1f; exponent < 30f; exponent += 0.02f)
         {
-            residualTrees.AddTree();
-            if (treeIndex % 10000 != 0)
+            Console.WriteLine("Exponent: " + exponent);
+            int[] kArgmax = new int[maxK];
+            float[] kMAE = new float[maxK];
+            for (int sampleIndex = 0; sampleIndex < test.Count; sampleIndex++)
             {
-                continue;
-            }
-
-            int argmaxTest = 0;
-            float maeTest = 0f;
-            foreach (Sample sample in test)
-            {
-                float[] prediction = residualTrees.Predict(sample.input);
-                int predictionArgmax = Argmax(prediction);
-                int sampleArgmax = Argmax(sample.output);
-                if (predictionArgmax == sampleArgmax)
+                Console.Write($"\rTest: {sampleIndex + 1}/{test.Count}");
+                Sample testSample = test[sampleIndex];
+                List<float[]> predictions = KNN(train, testSample.input, maxK, exponent);
+                float[] actual = testSample.output;
+                int actualArgmax = Argmax(actual);
+                for (int k = 1; k <= maxK; k++)
                 {
-                    argmaxTest++;
-                }
-                for (int outputIndex = 0; outputIndex < prediction.Length; outputIndex++)
-                {
-                    maeTest += MathF.Abs(prediction[outputIndex] - sample.output[outputIndex]);
-                }
-            }
-            maeTest /= ((float)test.Count * (float)test[0].output.Length);
-
-            int argmaxTrain = 0;
-            float maeTrain = 0f;
-            foreach (Sample sample in train)
-            {
-                float[] prediction = residualTrees.Predict(sample.input);
-                int predictionArgmax = Argmax(prediction);
-                int sampleArgmax = Argmax(sample.output);
-                if (predictionArgmax == sampleArgmax)
-                {
-                    argmaxTrain++;
-                }
-                for (int outputIndex = 0; outputIndex < prediction.Length; outputIndex++)
-                {
-                    maeTrain += MathF.Abs(prediction[outputIndex] - sample.output[outputIndex]);
+                    float[] kPrediction = predictions[k - 1];
+                    int kArgmaxPrediction = Argmax(kPrediction);
+                    if (kArgmaxPrediction == actualArgmax)
+                    {
+                        kArgmax[k - 1]++;
+                    }
+                    for (int i = 0; i < kPrediction.Length; i++)
+                    {
+                        kMAE[k - 1] += MathF.Abs(kPrediction[i] - actual[i]);
+                    }
                 }
             }
-            maeTrain /= ((float)train.Count * (float)train[0].output.Length);
-
-            lock (logLock)
+            Console.WriteLine();
+            for (int k = 1; (k <= maxK); k++)
             {
-                Console.WriteLine($"TREES: {treeIndex + 1}, TEST: {argmaxTest}, {maeTest}, TRAIN: {argmaxTrain}, {maeTrain}");
-                log.WriteLine($"{treeIndex + 1},{argmaxTest},{maeTest},{argmaxTrain},{maeTrain}");
+                kMAE[k - 1] /= ((float)test.Count * (float)test[0].output.Length);
+            }
+            for (int k = 1; k <= maxK; k++)
+            {
+                Console.WriteLine($"K: {k}, Exponent: {exponent}, Argmax: {kArgmax[k - 1]}, MAE: {kMAE[k - 1]}");
+                log.WriteLine($"{k},{exponent},{kArgmax[k - 1]},{kMAE[k - 1]}");
                 log.Flush();
             }
         }

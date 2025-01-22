@@ -1,9 +1,9 @@
 ﻿public class Sample
 {
-    public float[] input;
-    public float[] output;
+    public double[] input;
+    public double[] output;
 
-    public Sample(float[] input, float[] output)
+    public Sample(double[] input, double[] output)
     {
         this.input = input;
         this.output = output;
@@ -435,7 +435,7 @@ public class Program
             double weightSum = 0f;
 
             // iterate through neighbours
-            foreach((Sample trainSample, float distance) kNeighbour in kNeighbours)
+            foreach ((Sample trainSample, float distance) kNeighbour in kNeighbours)
             {
                 // calculate the weight of this neighbour
                 double weight = 1 - (kNeighbour.distance / maxDistance);

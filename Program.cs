@@ -1,4 +1,7 @@
-﻿public class Program
+﻿using static System.Net.Mime.MediaTypeNames;
+using System.Diagnostics;
+
+public class Program
 {
     public static int Argmax(double[] values)
     {
@@ -30,24 +33,30 @@
         return (double)errorCount / (double)samples.Count;
     }
 
-    public static List<double[]> KNN(List<Sample> train, double[] testInput, int maxK, double powerExponent, double rootExponent)
+    public static List<double[]> KNN(int maxK, List<Sample> train, double[] inputWeights, double[] distanceWeights, double distanceExponent, double distanceRoot, double weightExponent, double[] testInput, int ignoreTrainIndex = -1)
     {
         // find neighbours
-        (Sample trainSample, double distance)[] neighboursArray = new (Sample trainSample, double distance)[train.Count];
+        (int trainIndex, Sample trainSample, double distance)[] neighboursArray = new (int trainIndex, Sample trainSample, double distance)[train.Count];
         Parallel.For(0, train.Count, trainIndex =>
         {
+            Sample trainSample = train[trainIndex];
+            if (trainIndex == ignoreTrainIndex)
+            {
+                neighboursArray[trainIndex] = (trainIndex, trainSample, double.MaxValue);
+                return;
+            }
             double[] trainInput = train[trainIndex].input;
             double distance = 0f;
-            for (int i = 0; i < trainInput.Length; i++)
+            for (int inputIndex = 0; inputIndex < trainInput.Length; inputIndex++)
             {
-                distance += Math.Pow(Math.Abs(trainInput[i] - testInput[i]), powerExponent);
+                distance += Math.Pow(Math.Abs(trainInput[inputIndex] - testInput[inputIndex]), distanceExponent) * inputWeights[inputIndex];
             }
-            distance = Math.Pow(distance, 1f / rootExponent);
-            neighboursArray[trainIndex] = (train[trainIndex], distance);
+            distance = Math.Pow(distance, 1f / distanceRoot) * distanceWeights[trainIndex];
+            neighboursArray[trainIndex] = (trainIndex, trainSample, distance);
         });
 
         // sort near to far
-        List<(Sample trainSample, double distance)> neighbours = neighboursArray.ToList();
+        List<(int trainIndex, Sample trainSample, double distance)> neighbours = neighboursArray.ToList();
         neighbours.Sort((a, b) => a.distance.CompareTo(b.distance));
 
         // create results
@@ -57,7 +66,7 @@
         for (int k = 1; k <= maxK; k++)
         {
             // get the k neighbours
-            List<(Sample trainSample, double distance)> kNeighbours = neighbours.Take(k).ToList();
+            List<(int trainIndex, Sample trainSample, double distance)> kNeighbours = neighbours.Take(k).ToList();
 
             // find the max distance of the neighbours
             double maxDistance = kNeighbours.Last().distance;
@@ -66,11 +75,56 @@
             double[] result = new double[train[0].output.Length];
             double weightSum = 0f;
 
+            // if any neighbours are 0 its a special case
+            if (kNeighbours[0].distance == 0.0)
+            {
+                // gather all 0 distance neighbours
+                double zeroDistanceWeightSum = 0f;
+                foreach ((int trainIndex, Sample trainSample, double distance) kNeighbour in kNeighbours)
+                {
+                    // break once we hit a non 0 distance
+                    if (kNeighbour.distance != 0.0)
+                    {
+                        break;
+                    }
+
+                    // add to result
+                    double weight = distanceWeights[kNeighbour.trainIndex];
+                    zeroDistanceWeightSum += weight;
+                    for (int i = 0; i < result.Length; i++)
+                    {
+                        result[i] += kNeighbour.trainSample.output[i] * weight;
+                    }
+                }
+
+                // weighted average result
+                for (int i = 0; i < result.Length; i++)
+                {
+                    result[i] /= zeroDistanceWeightSum;
+                }
+
+                // add to results
+                results.Add(result);
+
+                // continue to next k
+                continue;
+            }
+
+            // reaching here implies no 0 distance neighbours
+
             // iterate through neighbours
-            foreach ((Sample trainSample, double distance) kNeighbour in kNeighbours)
+            foreach ((int trainIndex, Sample trainSample, double distance) kNeighbour in kNeighbours)
             {
                 // calculate the weight of this neighbour
-                double weight = maxDistance / kNeighbour.distance;
+                double weight;
+                if (k == 1)
+                {
+                    weight = 1.0;
+                }
+                else
+                {
+                    weight = Math.Pow(maxDistance / kNeighbour.distance, weightExponent);
+                }
 
                 // add to weight sum
                 weightSum += weight;
@@ -86,6 +140,10 @@
             for (int i = 0; i < result.Length; i++)
             {
                 result[i] /= weightSum;
+                if (double.IsNaN(result[i]))
+                {
+                    result[i] = 0.0; // nan/infinity can occur from exponent exploding
+                }
             }
 
             // add to results
@@ -96,53 +154,280 @@
         return results;
     }
 
+    public static (int[] kArgmaxs, double[] kAbsoluteErrors) Score(int maxK, List<Sample> samples, int[] samplesArgmax, double[] inputWeights, double[] distanceWeights, double distanceExponent, double distanceRoot, double weightExponent)
+    {
+        int[] kArgmaxs = new int[maxK];
+        double[] kAbsoluteErrors = new double[maxK];
+        for (int sampleIndex = 0; sampleIndex < samples.Count; sampleIndex++)
+        {
+            Sample testSample = samples[sampleIndex];
+            List<double[]> predictions = KNN(maxK, samples, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent, testSample.input, sampleIndex);
+            double[] actual = testSample.output;
+            int actualArgmax = samplesArgmax[sampleIndex];
+            for (int k = 1; k <= maxK; k++)
+            {
+                double[] kPrediction = predictions[k - 1];
+                int kArgmaxPrediction = Argmax(kPrediction);
+                if (kArgmaxPrediction == actualArgmax)
+                {
+                    kArgmaxs[k - 1]++;
+                }
+                for (int i = 0; i < kPrediction.Length; i++)
+                {
+                    kAbsoluteErrors[k - 1] += Math.Abs(kPrediction[i] - actual[i]);
+                }
+            }
+        }
+        return (kArgmaxs, kAbsoluteErrors);
+    }
+
+    public static bool IsBetter(ref double bestAbsoluteError, ref int bestArgmaxCorrect, int[] kArgmaxs, double[] kAbsoluteErrors)
+    {
+        bool improved = false;
+        for (int k = 0; k < kArgmaxs.Length; k++)
+        {
+            double absoluteError = kAbsoluteErrors[k];
+            int argmaxCorrect = kArgmaxs[k];
+            if (absoluteError < bestAbsoluteError)
+            {
+                bestAbsoluteError = absoluteError;
+                bestArgmaxCorrect = argmaxCorrect;
+                improved = true;
+            }
+        }
+        return improved;
+    }
+
     public static void Main(string[] args)
     {
-        List<Sample> train = Data.MNIST("d:/data/mnist_train.csv");
-        List<Sample> test = Data.MNIST("d:/data/mnist_test.csv");
+        Random random = new Random();
+        int maxK = 30;
+        List<(string name, List<Sample> samples)> datasets = new List<(string name, List<Sample> samples)>();
+        datasets.Add(("IRIS", Data.IRIS("./data/IRIS/iris.data")));
 
-        TextWriter log = new StreamWriter("log.csv");
-        log.WriteLine("k,exponent,argmax,mae");
-        log.Flush();
-
-        int maxK = 100;
-        for (double exponent = 1f; exponent < 30f; exponent += 0.1f)
+        foreach ((string name, List<Sample> samples) in datasets)
         {
-            Console.WriteLine("Exponent: " + exponent);
-            int[] kArgmax = new int[maxK];
-            double[] kMAE = new double[maxK];
-            for (int sampleIndex = 0; sampleIndex < test.Count; sampleIndex++)
+            int[] samplesArgmax = samples.Select(samples => Argmax(samples.output)).ToArray();
+            
+            TextWriter log = new StreamWriter(name + ".csv");
+            log.WriteLine("epoch,absoluteError,argmaxCorrect");
+            log.Flush();
+
+            double nudge = 0.1;
+            double distanceExponent = 1.0;
+            double distanceRoot = 1.0;
+            double weightExponent = 1.0;
+            double[] inputWeights = samples[0].input.Select(input => 1.0).ToArray();
+            double[] distanceWeights = samples.Select(sample => 1.0).ToArray();
+
+            long epoch = 0;
+            bool improved = true;
+            double bestAbsoluteError = double.MaxValue;
+            int bestArgmaxCorrect = 0;
+            int[] kArgmaxs;
+            double[] kAbsoluteErrors;
+
+            (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+            if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
             {
-                Console.Write($"\rTest: {sampleIndex + 1}/{test.Count}");
-                Sample testSample = test[sampleIndex];
-                List<double[]> predictions = KNN(train, testSample.input, maxK, exponent, exponent);
-                double[] actual = testSample.output;
-                int actualArgmax = Argmax(actual);
-                for (int k = 1; k <= maxK; k++)
+                log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                log.Flush();
+                Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, start");
+            }
+
+            while (improved)
+            {
+                improved = false;
+
+                // distance exponent down
+                epoch++;
+                distanceExponent -= nudge;
+                (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+
+                // if better, keep change
+                if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                 {
-                    double[] kPrediction = predictions[k - 1];
-                    int kArgmaxPrediction = Argmax(kPrediction);
-                    if (kArgmaxPrediction == actualArgmax)
+                    log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                    log.Flush();
+                    Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance exponent down");
+                    improved = true;
+                }
+                // down wasnt better
+                else
+                {
+                    // undo change AND, distance exponent up
+                    epoch++;
+                    distanceExponent += 2 * nudge;
+                    (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+
+                    // if better, keep change
+                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                     {
-                        kArgmax[k - 1]++;
+                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.Flush();
+                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance exponent up");
+                        improved = true;
                     }
-                    for (int i = 0; i < kPrediction.Length; i++)
+                    // up wasnt better either
+                    else
                     {
-                        kMAE[k - 1] += Math.Abs(kPrediction[i] - actual[i]);
+                        // reset to start
+                        distanceExponent -= nudge;
+                    }
+                }
+
+                // distance root down
+                epoch++;
+                distanceRoot -= nudge;
+                (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+
+                // if better, keep change
+                if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                {
+                    log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                    log.Flush();
+                    Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance root down");
+                    improved = true;
+                }
+                // down wasnt better
+                else
+                {
+                    // undo change AND, distance root up
+                    epoch++;
+                    distanceRoot += 2 * nudge;
+                    (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+                    // if better, keep change
+                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    {
+                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.Flush();
+                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance root up");
+                        improved = true;
+                    }
+                    // up wasnt better either
+                    else
+                    {
+                        // reset to start
+                        distanceRoot -= nudge;
+                    }
+                }
+
+                // weight exponent down
+                epoch++;
+                weightExponent -= nudge;
+                (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+
+                // if better, keep change
+                if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                {
+                    log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                    log.Flush();
+                    Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, weight exponent down");
+                    improved = true;
+                }
+                // down wasnt better
+                else
+                {
+                    // undo change AND, weight exponent up
+                    epoch++;
+                    weightExponent += 2 * nudge;
+                    (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+                    // if better, keep change
+                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    {
+                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.Flush();
+                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, weight exponent up");
+                        improved = true;
+                    }
+                    // up wasnt better either
+                    else
+                    {
+                        // reset to start
+                        weightExponent -= nudge;
+                    }
+                }
+
+                // iterate input weights
+                for (int inputIndex = 0; inputIndex < inputWeights.Length; inputIndex++)
+                {
+                    // input weight down
+                    epoch++;
+                    inputWeights[inputIndex] -= nudge;
+                    (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+                    // if better, keep change
+                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    {
+                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.Flush();
+                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, input weight down");
+                        improved = true;
+                    }
+                    // down wasnt better
+                    else
+                    {
+                        // undo change AND, input weight up
+                        epoch++;
+                        inputWeights[inputIndex] += 2 * nudge;
+                        (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+                        // if better, keep change
+                        if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                        {
+                            log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                            log.Flush();
+                            Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, input weight up");
+                            improved = true;
+                        }
+                        // up wasnt better either
+                        else
+                        {
+                            // reset to start
+                            inputWeights[inputIndex] -= nudge;
+                        }
+                    }
+                }
+
+                // iterate distance weights
+                for (int distanceIndex = 0; distanceIndex < distanceWeights.Length; distanceIndex++)
+                {
+                    // distance weight down
+                    epoch++;
+                    distanceWeights[distanceIndex] -= nudge;
+                    (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+                    // if better, keep change
+                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    {
+                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.Flush();
+                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance weight down");
+                        improved = true;
+                    }
+                    // down wasnt better
+                    else
+                    {
+                        // undo change AND, distance weight up
+                        epoch++;
+                        distanceWeights[distanceIndex] += 2 * nudge;
+                        (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
+                        // if better, keep change
+                        if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                        {
+                            log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                            log.Flush();
+                            Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance weight up");
+                            improved = true;
+                        }
+                        // up wasnt better either
+                        else
+                        {
+                            // reset to start
+                            distanceWeights[distanceIndex] -= nudge;
+                        }
                     }
                 }
             }
-            Console.WriteLine();
-            for (int k = 1; (k <= maxK); k++)
-            {
-                kMAE[k - 1] /= ((double)test.Count * (double)test[0].output.Length);
-            }
-            for (int k = 1; k <= maxK; k++)
-            {
-                Console.WriteLine($"K: {k}, Exponent: {exponent}, Argmax: {kArgmax[k - 1]}, MAE: {kMAE[k - 1]}");
-                log.WriteLine($"{k},{exponent},{kArgmax[k - 1]},{kMAE[k - 1]}");
-                log.Flush();
-            }
+   
+            log.Close();
         }
     }
 }

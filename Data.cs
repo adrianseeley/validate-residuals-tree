@@ -1,6 +1,6 @@
 public static class Data
 {
-    public static List<Sample> IRIS(string filename)
+    public static Dataset IRIS(string filename)
     {
         // iris.data
         List<Sample> samples = new List<Sample>();
@@ -37,7 +37,23 @@ public static class Data
             }
             samples.Add(new Sample(input, output));
         }
-        return samples;
+
+        // every second sample is used as a test
+        List<Sample> train = new List<Sample>();
+        List<Sample> test = new List<Sample>();
+        for (int sampleIndex = 0; sampleIndex < samples.Count; sampleIndex++)
+        {
+            if (sampleIndex % 2 == 0)
+            {
+                train.Add(samples[sampleIndex]);
+            }
+            else
+            {
+                test.Add(samples[sampleIndex]);
+            }
+        }
+
+        return new Dataset("Iris", train.ToArray(), test.ToArray());
     }
 
     public static List<Sample> WINE(string redFilename, string whiteFilename)

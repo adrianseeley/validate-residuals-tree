@@ -3,8 +3,12 @@
     public static void Main(string[] args)
     {
         int maxK = 10;
-        double nudge = 0.1;
-        List<Dataset> datasets = new List<Dataset>();
+        double nudge = 0.01;
+        double requiredPassImprovement = 0.001;
+        List<Dataset> datasets = new List<Dataset>()
+        {
+            Data.IRIS("./data/IRIS/iris.data"),
+        };
 
         foreach (Dataset dataset in datasets)
         {
@@ -15,30 +19,22 @@
             Fitness fitness = new Fitness(dataset, knnConfiguration);
             
             // set the starting fitness
-            fitness.CheckImproved(dataset, knnConfiguration);
+            fitness.CheckImproved();
 
-            // loop until improvements stop
-            bool improved = true;
-            while (improved)
+            // loop until required pass improvement isnt met
+            bool requirementMet = true;
+            while (requirementMet)
             {
-                improved = false;
-
+                // start the starting fitness
+                double passStartFitness = fitness.absoluteErrorAverageTrain;
 
                 // try distance exponent down
                 knnConfiguration.distanceExponent -= nudge;
-                if (fitness.CheckImproved(dataset, knnConfiguration))
-                {
-                    improved = true;
-                }
-                else
+                if (!fitness.CheckImproved())
                 {
                     // try distance exponent up
                     knnConfiguration.distanceExponent += 2 * nudge;
-                    if (fitness.CheckImproved(dataset, knnConfiguration))
-                    {
-                        improved = true;
-                    }
-                    else
+                    if (!fitness.CheckImproved())
                     {
                         // reset to original value
                         knnConfiguration.distanceExponent -= nudge;
@@ -47,19 +43,11 @@
 
                 // try distance root down
                 knnConfiguration.distanceRoot -= nudge;
-                if (fitness.CheckImproved(dataset, knnConfiguration))
-                {
-                    improved = true;
-                }
-                else
+                if (!fitness.CheckImproved())
                 {
                     // try distance root up
                     knnConfiguration.distanceRoot += 2 * nudge;
-                    if (fitness.CheckImproved(dataset, knnConfiguration))
-                    {
-                        improved = true;
-                    }
-                    else
+                    if (!fitness.CheckImproved())
                     {
                         // reset to original value
                         knnConfiguration.distanceRoot -= nudge;
@@ -68,19 +56,11 @@
 
                 // try weight exponent down
                 knnConfiguration.weightExponent -= nudge;
-                if (fitness.CheckImproved(dataset, knnConfiguration))
-                {
-                    improved = true;
-                }
-                else
+                if (!fitness.CheckImproved())
                 {
                     // try weight exponent up
                     knnConfiguration.weightExponent += 2 * nudge;
-                    if (fitness.CheckImproved(dataset, knnConfiguration))
-                    {
-                        improved = true;
-                    }
-                    else
+                    if (!fitness.CheckImproved())
                     {
                         // reset to original value
                         knnConfiguration.weightExponent -= nudge;
@@ -92,19 +72,11 @@
                 {
                     // try input weight down
                     knnConfiguration.inputWeights[inputIndex] -= nudge;
-                    if (fitness.CheckImproved(dataset, knnConfiguration))
-                    {
-                        improved = true;
-                    }
-                    else
+                    if (!fitness.CheckImproved())
                     {
                         // try input weight up
                         knnConfiguration.inputWeights[inputIndex] += 2 * nudge;
-                        if (fitness.CheckImproved(dataset, knnConfiguration))
-                        {
-                            improved = true;
-                        }
-                        else
+                        if (!fitness.CheckImproved())
                         {
                             // reset to original value
                             knnConfiguration.inputWeights[inputIndex] -= nudge;
@@ -117,25 +89,22 @@
                 {
                     // try distance weight down
                     knnConfiguration.distanceWeights[distanceIndex] -= nudge;
-                    if (fitness.CheckImproved(dataset, knnConfiguration))
-                    {
-                        improved = true;
-                    }
-                    else
+                    if (!fitness.CheckImproved())
                     {
                         // try distance weight up
                         knnConfiguration.distanceWeights[distanceIndex] += 2 * nudge;
-                        if (fitness.CheckImproved(dataset, knnConfiguration))
-                        {
-                            improved = true;
-                        }
-                        else
+                        if (!fitness.CheckImproved())
                         {
                             // reset to original value
                             knnConfiguration.distanceWeights[distanceIndex] -= nudge;
                         }
                     }
                 }
+
+                // check the pass improvement
+                double passEndFitness = fitness.absoluteErrorAverageTrain;
+                double passImprovement = passStartFitness - passEndFitness;
+                requirementMet = passImprovement > requiredPassImprovement;
             }
 
             // improvement complete, finalize log

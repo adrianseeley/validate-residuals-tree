@@ -114,15 +114,15 @@
         return results;
     }
 
-    public static void Score(Dataset dataset, KNNConfiguration knnConfiguration, ref int[] kArgmaxCorrectsTrain, ref double[] kAbsoluteErrorsTrain, ref int[] kArgmaxCorrectsTest, ref double[] kAbsoluteErrorsTest)
+    public static void Score(Dataset dataset, KNNConfiguration knnConfiguration, ref double[] kArgmaxErrorTrain, ref double[] kAbsoluteErrorTrain, ref double[] kArgmaxErrorTest, ref double[] kAbsoluteErrorTest)
     {
         // zero results
         for (int k = 0; k < knnConfiguration.maxK; k++)
         {
-            kArgmaxCorrectsTrain[k] = 0;
-            kAbsoluteErrorsTrain[k] = 0f;
-            kArgmaxCorrectsTest[k] = 0;
-            kAbsoluteErrorsTest[k] = 0f;
+            kArgmaxErrorTrain[k] = 0;
+            kAbsoluteErrorTrain[k] = 0f;
+            kArgmaxErrorTest[k] = 0;
+            kAbsoluteErrorTest[k] = 0f;
         }
 
         // iterate through train samples
@@ -149,20 +149,26 @@
                 // get the argmax prediction
                 int kArgmaxPrediction = Utility.Argmax(kPrediction);
 
-                // if the prediction is correct
-                if (kArgmaxPrediction == actualArgmax)
+                // if the prediction is incorrect
+                if (kArgmaxPrediction != actualArgmax)
                 {
-                    // increment correct count
-                    kArgmaxCorrectsTrain[k - 1]++;
+                    // increment incorrect count
+                    kArgmaxErrorTrain[k - 1] += 1;
                 }
 
                 // iterate through outputs
                 for (int i = 0; i < kPrediction.Length; i++)
                 {
                     // add the absolute error
-                    kAbsoluteErrorsTrain[k - 1] += Math.Abs(kPrediction[i] - actual[i]);
+                    kAbsoluteErrorTrain[k - 1] += Math.Abs(kPrediction[i] - actual[i]);
                 }
             }
+        }
+
+        // calculate argmax errors
+        for (int k = 0; k < knnConfiguration.maxK; k++)
+        {
+            kArgmaxErrorTrain[k] = kArgmaxErrorTrain[k] / (double)dataset.train.Length;
         }
 
         // iterate through test samples
@@ -189,20 +195,26 @@
                 // get the argmax prediction
                 int kArgmaxPrediction = Utility.Argmax(kPrediction);
 
-                // if the prediction is correct
-                if (kArgmaxPrediction == actualArgmax)
+                // if the prediction is incorrect
+                if (kArgmaxPrediction != actualArgmax)
                 {
-                    // increment correct count
-                    kArgmaxCorrectsTest[k - 1]++;
+                    // increment incorrect count
+                    kArgmaxErrorTest[k - 1]++;
                 }
 
                 // iterate through outputs
                 for (int i = 0; i < kPrediction.Length; i++)
                 {
                     // add the absolute error
-                    kAbsoluteErrorsTest[k - 1] += Math.Abs(kPrediction[i] - actual[i]);
+                    kAbsoluteErrorTest[k - 1] += Math.Abs(kPrediction[i] - actual[i]);
                 }
             }
+        }
+
+        // calculate argmax errors
+        for (int k = 0; k < knnConfiguration.maxK; k++)
+        {
+            kArgmaxErrorTest[k] = kArgmaxErrorTest[k] / (double)dataset.test.Length;
         }
     }
 }

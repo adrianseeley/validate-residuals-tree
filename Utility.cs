@@ -29,4 +29,14 @@
         }
         return (double)errorCount / (double)samples.Count;
     }
+
+    public static double AbsoluteError(double[] a, double[] b)
+    {
+        double error = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            error += Math.Abs(a[i] - b[i]);
+        }
+        return error;
+    }
 }

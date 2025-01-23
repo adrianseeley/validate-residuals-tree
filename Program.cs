@@ -49,7 +49,7 @@ public class Program
             double distance = 0f;
             for (int inputIndex = 0; inputIndex < trainInput.Length; inputIndex++)
             {
-                distance += Math.Pow(Math.Abs(trainInput[inputIndex] - testInput[inputIndex]), distanceExponent) * inputWeights[inputIndex];
+                distance += Math.Pow(1.0 + Math.Abs(trainInput[inputIndex] - testInput[inputIndex]), distanceExponent) * inputWeights[inputIndex];
             }
             distance = Math.Pow(distance, 1f / distanceRoot) * distanceWeights[trainIndex];
             neighboursArray[trainIndex] = (trainIndex, trainSample, distance);
@@ -74,43 +74,6 @@ public class Program
             // create the result and weight sum
             double[] result = new double[train[0].output.Length];
             double weightSum = 0f;
-
-            // if any neighbours are 0 its a special case
-            if (kNeighbours[0].distance == 0.0)
-            {
-                // gather all 0 distance neighbours
-                double zeroDistanceWeightSum = 0f;
-                foreach ((int trainIndex, Sample trainSample, double distance) kNeighbour in kNeighbours)
-                {
-                    // break once we hit a non 0 distance
-                    if (kNeighbour.distance != 0.0)
-                    {
-                        break;
-                    }
-
-                    // add to result
-                    double weight = distanceWeights[kNeighbour.trainIndex];
-                    zeroDistanceWeightSum += weight;
-                    for (int i = 0; i < result.Length; i++)
-                    {
-                        result[i] += kNeighbour.trainSample.output[i] * weight;
-                    }
-                }
-
-                // weighted average result
-                for (int i = 0; i < result.Length; i++)
-                {
-                    result[i] /= zeroDistanceWeightSum;
-                }
-
-                // add to results
-                results.Add(result);
-
-                // continue to next k
-                continue;
-            }
-
-            // reaching here implies no 0 distance neighbours
 
             // iterate through neighbours
             foreach ((int trainIndex, Sample trainSample, double distance) kNeighbour in kNeighbours)
@@ -142,7 +105,7 @@ public class Program
                 result[i] /= weightSum;
                 if (double.IsNaN(result[i]))
                 {
-                    result[i] = 0.0; // nan/infinity can occur from exponent exploding
+                    throw new Exception("NaN");
                 }
             }
 

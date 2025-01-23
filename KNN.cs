@@ -114,7 +114,7 @@
         return results;
     }
 
-    public static void Score(Dataset dataset, KNNConfiguration knnConfiguration, ref double[] kArgmaxErrorTrain, ref double[] kAbsoluteErrorTrain, ref double[] kArgmaxErrorTest, ref double[] kAbsoluteErrorTest)
+    public static void Score(Dataset dataset, KNNConfiguration knnConfiguration, ref double[] kArgmaxErrorTrain, ref double[] kAbsoluteErrorTrain, ref double[] kArgmaxErrorTest, ref double[] kAbsoluteErrorTest, ref int[] kTrainCorrects, ref int[] kTestCorrects)
     {
         // zero results
         for (int k = 0; k < knnConfiguration.maxK; k++)
@@ -123,6 +123,8 @@
             kAbsoluteErrorTrain[k] = 0f;
             kArgmaxErrorTest[k] = 0;
             kAbsoluteErrorTest[k] = 0f;
+            kTrainCorrects[k] = 0;
+            kTestCorrects[k] = 0;
         }
 
         // iterate through train samples
@@ -154,6 +156,11 @@
                 {
                     // increment incorrect count
                     kArgmaxErrorTrain[k - 1] += 1;
+                }
+                else
+                {
+                    // increment correct count
+                    kTrainCorrects[k - 1]++;
                 }
 
                 // iterate through outputs
@@ -200,6 +207,11 @@
                 {
                     // increment incorrect count
                     kArgmaxErrorTest[k - 1]++;
+                }
+                else
+                {
+                    // increment correct count
+                    kTestCorrects[k - 1]++;
                 }
 
                 // iterate through outputs

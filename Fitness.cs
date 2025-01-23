@@ -15,6 +15,8 @@
     public double[] kAbsoluteErrorTrain;
     public double[] kArgmaxErrorTest;
     public double[] kAbsoluteErrorTest;
+    public int[] kTrainCorrects;
+    public int[] kTestCorrects;
     public TextWriter log;
 
     public Fitness(Dataset dataset, KNNConfiguration knnConfiguration)
@@ -34,15 +36,17 @@
         this.kAbsoluteErrorTrain = new double[knnConfiguration.maxK];
         this.kArgmaxErrorTest = new double[knnConfiguration.maxK];
         this.kAbsoluteErrorTest = new double[knnConfiguration.maxK];
+        this.kTrainCorrects = new int[knnConfiguration.maxK];
+        this.kTestCorrects = new int[knnConfiguration.maxK];
         this.log = new StreamWriter($"./{dataset.name}-log.csv");
-        this.log.WriteLine("epoch,argmaxErrorAverageTrain,absoluteErrorAverageTrain,argmaxErrorAverageTest,absoluteErrorAverageTest,argmaxErrorBestTrain,absoluteErrorBestTrain,argmaxErrorBestTest,absoluteErrorBestTest");
+        this.log.WriteLine($"epoch,argmaxErrorAverageTrain,absoluteErrorAverageTrain,argmaxErrorAverageTest,absoluteErrorAverageTest,argmaxErrorBestTrain,absoluteErrorBestTrain,argmaxErrorBestTest,absoluteErrorBestTest,{string.Join(",", Enumerable.Range(0, knnConfiguration.maxK).Select(i => "k" + (i + 1) + "TrainCorrects"))},{string.Join(",", Enumerable.Range(0, knnConfiguration.maxK).Select(i => "k" + (i + 1) + "TestCorrects"))},trainTotal,testTotal");
         this.log.Flush();
     }
 
     public bool CheckImproved()
     {
         epoch++;
-        KNN.Score(dataset, knnConfiguration, ref kArgmaxErrorTrain, ref kAbsoluteErrorTrain, ref kArgmaxErrorTest, ref kAbsoluteErrorTest);
+        KNN.Score(dataset, knnConfiguration, ref kArgmaxErrorTrain, ref kAbsoluteErrorTrain, ref kArgmaxErrorTest, ref kAbsoluteErrorTest, ref kTrainCorrects, ref kTestCorrects);
         double argmaxErrorAverageTrain = kArgmaxErrorTrain.Average();
         double absoluteErrorAverageTrain = kAbsoluteErrorTrain.Average();
         double argmaxErrorAverageTest = kArgmaxErrorTest.Average();
@@ -66,7 +70,7 @@
             this.absoluteErrorBestTest = absoluteErrorBestTest;
             improved = true;
         }
-        log.WriteLine($"{epoch},{argmaxErrorAverageTrain},{absoluteErrorAverageTrain},{argmaxErrorAverageTest},{absoluteErrorAverageTest},{argmaxErrorBestTrain},{absoluteErrorBestTrain},{argmaxErrorBestTest},{absoluteErrorBestTest}");
+        log.WriteLine($"{epoch},{argmaxErrorAverageTrain},{absoluteErrorAverageTrain},{argmaxErrorAverageTest},{absoluteErrorAverageTest},{argmaxErrorBestTrain},{absoluteErrorBestTrain},{argmaxErrorBestTest},{absoluteErrorBestTest},{string.Join(",", kTrainCorrects)},{string.Join(",", kTestCorrects)},{dataset.train.Length},{dataset.test.Length}");
         log.Flush();
         Console.Write($"\rEpoch: {epoch}, Error: {this.absoluteErrorAverageTrain}");
         return improved;
@@ -89,7 +93,6 @@
         }
 
         // iterate train samples
-        int[] kTrainCorrect = new int[knnConfiguration.maxK];
         for (int trainIndex = 0; trainIndex < dataset.train.Length; trainIndex++)
         {
             // get the train sample
@@ -107,12 +110,6 @@
                 // get argmax prediction
                 int argmaxPrediction = Utility.Argmax(predictions[k]);
 
-                // check if answer was correct
-                if (argmaxActual == argmaxPrediction)
-                {
-                    kTrainCorrect[k]++;
-                }
-
                 // get absolute error
                 double absoluteError = Utility.AbsoluteError(dataset.train[trainIndex].output, predictions[k]);
 
@@ -122,7 +119,6 @@
         }
 
         // iterate test samples
-        int[] kTestCorrect = new int[knnConfiguration.maxK];
         for (int testIndex = 0; testIndex < dataset.test.Length; testIndex++)
         {
             // predict the test sample
@@ -136,12 +132,6 @@
             {
                 // get argmax prediction
                 int argmaxPrediction = Utility.Argmax(predictions[k]);
-
-                // check if answer was correct
-                if (argmaxActual == argmaxPrediction)
-                {
-                    kTestCorrect[k]++;
-                }
 
                 // get absolute error
                 double absoluteError = Utility.AbsoluteError(dataset.test[testIndex].output, predictions[k]);
@@ -163,13 +153,13 @@
         finalLog.WriteLine("k,argmaxErrorTrain,absoluteErrorTrain,argmaxErrorTest,absoluteErrorTest,trainCorrect,trainTotal,testCorrect,testTotal");
 
         // get final score
-        KNN.Score(dataset, knnConfiguration, ref kArgmaxErrorTrain, ref kAbsoluteErrorTrain, ref kArgmaxErrorTest, ref kAbsoluteErrorTest);
+        KNN.Score(dataset, knnConfiguration, ref kArgmaxErrorTrain, ref kAbsoluteErrorTrain, ref kArgmaxErrorTest, ref kAbsoluteErrorTest, ref kTrainCorrects, ref kTestCorrects);
 
         // write results
         for (int k = 0; k < knnConfiguration.maxK; k++)
         {
-            finalLog.WriteLine($"{k + 1},{kArgmaxErrorTrain[k]},{kAbsoluteErrorTrain[k]},{kArgmaxErrorTest[k]},{kAbsoluteErrorTest[k]},{kTrainCorrect[k]},{dataset.train.Length},{kTestCorrect[k]},{dataset.test.Length}");
-            Console.WriteLine($"K: {k + 1}, Train(Argmax): {kArgmaxErrorTrain[k]}, Train(Absolute): {kAbsoluteErrorTrain[k]}, Test(Argmax): {kArgmaxErrorTest[k]}, Test(Absolute): {kAbsoluteErrorTest[k]}, Train Correct: {kTrainCorrect[k]}/{dataset.train.Length}, Test Correct: {kTestCorrect[k]}/{dataset.test.Length}");
+            finalLog.WriteLine($"{k + 1},{kArgmaxErrorTrain[k]},{kAbsoluteErrorTrain[k]},{kArgmaxErrorTest[k]},{kAbsoluteErrorTest[k]},{kTrainCorrects[k]},{dataset.train.Length},{kTestCorrects[k]},{dataset.test.Length}");
+            Console.WriteLine($"K: {k + 1}, Train(Argmax): {kArgmaxErrorTrain[k]}, Train(Absolute): {kAbsoluteErrorTrain[k]}, Test(Argmax): {kArgmaxErrorTest[k]}, Test(Absolute): {kAbsoluteErrorTest[k]}, Train Correct: {kTrainCorrects[k]}/{dataset.train.Length}, Test Correct: {kTestCorrects[k]}/{dataset.test.Length}");
         }
 
         // close final log

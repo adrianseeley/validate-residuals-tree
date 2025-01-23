@@ -181,21 +181,37 @@ public class Program
         return (kArgmaxs, kAbsoluteErrors);
     }
 
-    public static bool IsBetter(ref double bestAbsoluteError, ref int bestArgmaxCorrect, int[] kArgmaxs, double[] kAbsoluteErrors)
+    public static bool IsBetter(ref double bestAverageAbsoluteError, ref int bestAverageArgmaxCorrect, ref double bestAbsoluteError, ref int bestArgmaxCorrect, int[] kArgmaxs, double[] kAbsoluteErrors)
     {
-        bool improved = false;
-        for (int k = 0; k < kArgmaxs.Length; k++)
+        // average results
+        double averageAbsoluteError = kAbsoluteErrors.Average();
+        int averageArgmaxCorrect = (int)kArgmaxs.Average();
+        
+        // if its a better average set it and return improved
+        if (averageAbsoluteError < bestAverageAbsoluteError)
         {
-            double absoluteError = kAbsoluteErrors[k];
-            int argmaxCorrect = kArgmaxs[k];
-            if (absoluteError < bestAbsoluteError)
+            bestAverageAbsoluteError = averageAbsoluteError;
+            bestAverageArgmaxCorrect = averageArgmaxCorrect;
+
+            // update the bests
+            for (int k = 0; k < kArgmaxs.Length; k++)
             {
-                bestAbsoluteError = absoluteError;
-                bestArgmaxCorrect = argmaxCorrect;
-                improved = true;
+                int argmaxCorrect = kArgmaxs[k];
+                double absoluteError = kAbsoluteErrors[k];
+                if (argmaxCorrect > bestArgmaxCorrect)
+                {
+                    bestArgmaxCorrect = argmaxCorrect;
+                }
+                if (absoluteError < bestAbsoluteError)
+                {
+                    bestAbsoluteError = absoluteError;
+                }
             }
+            return true;
         }
-        return improved;
+
+        // otherwise not better, return false
+        return false;
     }
 
     public static void Main(string[] args)
@@ -210,10 +226,10 @@ public class Program
             int[] samplesArgmax = samples.Select(samples => Argmax(samples.output)).ToArray();
             
             TextWriter log = new StreamWriter(name + ".csv");
-            log.WriteLine("epoch,absoluteError,argmaxCorrect");
+            log.WriteLine("epoch,averageAbsoluteError,averageArgmaxCorrect,bestAbsoluteError,bestArgmaxCorrect");
             log.Flush();
 
-            double nudge = 0.1;
+            double nudge = 0.01;
             double distanceExponent = 1.0;
             double distanceRoot = 1.0;
             double weightExponent = 1.0;
@@ -222,22 +238,29 @@ public class Program
 
             long epoch = 0;
             bool improved = true;
+            double bestAverageAbsoluteError = double.MaxValue;
+            int bestAverageArgmaxCorrect = 0;
             double bestAbsoluteError = double.MaxValue;
             int bestArgmaxCorrect = 0;
             int[] kArgmaxs;
             double[] kAbsoluteErrors;
 
             (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
-            if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+            if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
             {
-                log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                 log.Flush();
-                Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, start");
+                Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, start");
             }
 
             while (improved)
             {
                 improved = false;
+
+                // console log all weights
+                Console.WriteLine($"DE {distanceExponent} DR {distanceRoot} WE {weightExponent}");
+                Console.WriteLine($"IW {string.Join(",", inputWeights)}");
+                Console.WriteLine($"DW {string.Join(",", distanceWeights)}");
 
                 // distance exponent down
                 epoch++;
@@ -245,11 +268,11 @@ public class Program
                 (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
 
                 // if better, keep change
-                if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                 {
-                    log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                    log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                     log.Flush();
-                    Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance exponent down");
+                    Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance exponent down");
                     improved = true;
                 }
                 // down wasnt better
@@ -261,11 +284,11 @@ public class Program
                     (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
 
                     // if better, keep change
-                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                     {
-                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                         log.Flush();
-                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance exponent up");
+                        Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance exponent up");
                         improved = true;
                     }
                     // up wasnt better either
@@ -282,11 +305,11 @@ public class Program
                 (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
 
                 // if better, keep change
-                if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                 {
-                    log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                    log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                     log.Flush();
-                    Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance root down");
+                    Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance root down");
                     improved = true;
                 }
                 // down wasnt better
@@ -297,11 +320,11 @@ public class Program
                     distanceRoot += 2 * nudge;
                     (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
                     // if better, keep change
-                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                     {
-                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                         log.Flush();
-                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance root up");
+                        Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance root up");
                         improved = true;
                     }
                     // up wasnt better either
@@ -318,11 +341,11 @@ public class Program
                 (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
 
                 // if better, keep change
-                if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                 {
-                    log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                    log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                     log.Flush();
-                    Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, weight exponent down");
+                    Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, weight exponent down");
                     improved = true;
                 }
                 // down wasnt better
@@ -333,11 +356,11 @@ public class Program
                     weightExponent += 2 * nudge;
                     (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
                     // if better, keep change
-                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                     {
-                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                         log.Flush();
-                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, weight exponent up");
+                        Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, weight exponent up");
                         improved = true;
                     }
                     // up wasnt better either
@@ -356,11 +379,11 @@ public class Program
                     inputWeights[inputIndex] -= nudge;
                     (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
                     // if better, keep change
-                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                     {
-                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                         log.Flush();
-                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, input weight down");
+                        Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, input weight {inputIndex} down");
                         improved = true;
                     }
                     // down wasnt better
@@ -371,11 +394,11 @@ public class Program
                         inputWeights[inputIndex] += 2 * nudge;
                         (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
                         // if better, keep change
-                        if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                        if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                         {
-                            log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                            log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                             log.Flush();
-                            Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, input weight up");
+                            Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, input weight {inputIndex} up");
                             improved = true;
                         }
                         // up wasnt better either
@@ -395,11 +418,11 @@ public class Program
                     distanceWeights[distanceIndex] -= nudge;
                     (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
                     // if better, keep change
-                    if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                    if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                     {
-                        log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                        log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                         log.Flush();
-                        Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance weight down");
+                        Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance weight {distanceIndex} down");
                         improved = true;
                     }
                     // down wasnt better
@@ -410,11 +433,11 @@ public class Program
                         distanceWeights[distanceIndex] += 2 * nudge;
                         (kArgmaxs, kAbsoluteErrors) = Score(maxK, samples, samplesArgmax, inputWeights, distanceWeights, distanceExponent, distanceRoot, weightExponent);
                         // if better, keep change
-                        if (IsBetter(ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
+                        if (IsBetter(ref bestAverageAbsoluteError, ref bestAverageArgmaxCorrect, ref bestAbsoluteError, ref bestArgmaxCorrect, kArgmaxs, kAbsoluteErrors))
                         {
-                            log.WriteLine($"{epoch},{bestAbsoluteError},{bestArgmaxCorrect}");
+                            log.WriteLine($"{epoch},{bestAverageAbsoluteError},{bestAverageArgmaxCorrect},{bestAbsoluteError},{bestArgmaxCorrect}");
                             log.Flush();
-                            Console.WriteLine($"epoch: {epoch}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance weight up");
+                            Console.WriteLine($"epoch: {epoch}, average absolute: {bestAverageAbsoluteError}, average argmax: {bestAverageArgmaxCorrect}, absolute: {bestAbsoluteError}, argmax: {bestArgmaxCorrect}, distance weight {distanceIndex} up");
                             improved = true;
                         }
                         // up wasnt better either

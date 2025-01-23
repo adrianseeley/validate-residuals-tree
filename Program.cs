@@ -4,7 +4,7 @@
     {
         int maxK = 10;
         double nudge = 0.01;
-        double requiredPassImprovement = 0.001;
+        double requiredPassImprovement = 0.0005;
         List<Dataset> datasets = new List<Dataset>()
         {
             Data.IRIS("./data/IRIS/iris.data"),
@@ -105,6 +105,8 @@
                 double passEndFitness = fitness.absoluteErrorAverageTrain;
                 double passImprovement = passStartFitness - passEndFitness;
                 requirementMet = passImprovement > requiredPassImprovement;
+
+                Console.WriteLine($"\nPass Improvement: {passImprovement}");
             }
 
             // improvement complete, finalize log

@@ -17,7 +17,7 @@
                 // set null
                 neighbour.index = -1;
                 neighbour.sample = null;
-                neighbour.distance = double.MaxValue;
+                neighbour.distance = double.PositiveInfinity;
                 return;
             }
 
@@ -66,7 +66,7 @@
         for (int k = 1; k <= knnConfiguration.maxK; k++)
         {
             // get the k neighbours
-            List<Neighbour> kNeighbours = knnConfiguration.neighbours.Take(k).ToList();
+            List<Neighbour> kNeighbours = knnConfiguration.neighbours.Where(n => n.sample != null).Take(k).ToList();
 
             // find the max distance of the neighbours
             double maxDistance = kNeighbours.Last().distance;

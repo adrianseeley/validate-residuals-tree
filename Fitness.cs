@@ -17,6 +17,8 @@
     public double[] kAbsoluteErrorTest;
     public int[] kTrainCorrects;
     public int[] kTestCorrects;
+    public int[] kTrainCorrectBest;
+    public int[] kTestCorrectBest;
     public TextWriter log;
 
     public Fitness(Dataset dataset, KNNConfiguration knnConfiguration)
@@ -38,6 +40,8 @@
         this.kAbsoluteErrorTest = new double[knnConfiguration.maxK];
         this.kTrainCorrects = new int[knnConfiguration.maxK];
         this.kTestCorrects = new int[knnConfiguration.maxK];
+        this.kTrainCorrectBest = new int[knnConfiguration.maxK];
+        this.kTestCorrectBest = new int[knnConfiguration.maxK];
         this.log = new StreamWriter($"./{dataset.name}-log.csv");
         this.log.WriteLine($"epoch,argmaxErrorAverageTrain,absoluteErrorAverageTrain,argmaxErrorAverageTest,absoluteErrorAverageTest,argmaxErrorBestTrain,absoluteErrorBestTrain,argmaxErrorBestTest,absoluteErrorBestTest,{string.Join(",", Enumerable.Range(0, knnConfiguration.maxK).Select(i => "k" + (i + 1) + "TrainCorrects"))},{string.Join(",", Enumerable.Range(0, knnConfiguration.maxK).Select(i => "k" + (i + 1) + "TestCorrects"))},trainTotal,testTotal");
         this.log.Flush();
@@ -68,9 +72,11 @@
             this.absoluteErrorBestTrain = absoluteErrorBestTrain;
             this.argmaxErrorBestTest = argmaxErrorBestTest;
             this.absoluteErrorBestTest = absoluteErrorBestTest;
+            Array.Copy(kTrainCorrects, this.kTrainCorrectBest, knnConfiguration.maxK);
+            Array.Copy(kTestCorrects, this.kTestCorrectBest, knnConfiguration.maxK);
             improved = true;
         }
-        log.WriteLine($"{epoch},{argmaxErrorAverageTrain},{absoluteErrorAverageTrain},{argmaxErrorAverageTest},{absoluteErrorAverageTest},{argmaxErrorBestTrain},{absoluteErrorBestTrain},{argmaxErrorBestTest},{absoluteErrorBestTest},{string.Join(",", kTrainCorrects)},{string.Join(",", kTestCorrects)},{dataset.train.Length},{dataset.test.Length}");
+        log.WriteLine($"{epoch},{this.argmaxErrorAverageTrain},{this.absoluteErrorAverageTrain},{this.argmaxErrorAverageTest},{this.absoluteErrorAverageTest},{this.argmaxErrorBestTrain},{this.absoluteErrorBestTrain},{this.argmaxErrorBestTest},{this.absoluteErrorBestTest},{string.Join(",", this.kTrainCorrectBest)},{string.Join(",", this.kTestCorrectBest)},{dataset.train.Length},{dataset.test.Length}");
         log.Flush();
         Console.Write($"\rEpoch: {epoch}, Error: {this.absoluteErrorAverageTrain}");
         return improved;

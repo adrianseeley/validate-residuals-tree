@@ -53,7 +53,7 @@ public static class Data
             }
         }
 
-        return new Dataset("Iris", train.ToArray(), test.ToArray());
+        return new Dataset("IRIS", train.ToArray(), test.ToArray());
     }
 
     public static List<Sample> WINE(string redFilename, string whiteFilename)
@@ -385,10 +385,11 @@ public static class Data
         return samples;
     }
 
-    public static List<Sample> MNIST(string filename)
+    public static Dataset MNIST(string filenameTrain, string filenameTest, int limit = -1)
     {
-        List<Sample> samples = new List<Sample>();
-        string[] lines = File.ReadAllLines(filename);
+        // read train
+        List<Sample> trainSamples = new List<Sample>();
+        string[] lines = File.ReadAllLines(filenameTrain);
         for (int lineIndex = 1; lineIndex < lines.Length; lineIndex++)
         {
             string line = lines[lineIndex].Trim();
@@ -405,8 +406,39 @@ public static class Data
             {
                 input[i - 1] = double.Parse(parts[i]) / 255f;
             }
-            samples.Add(new Sample(input, labelOneHot));
+            trainSamples.Add(new Sample(input, labelOneHot));
         }
-        return samples;
+
+        // read test
+        List<Sample> testSamples = new List<Sample>();
+        lines = File.ReadAllLines(filenameTest);
+        for (int lineIndex = 1; lineIndex < lines.Length; lineIndex++)
+        {
+            string line = lines[lineIndex].Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+            string[] parts = line.Split(',');
+            int labelInt = int.Parse(parts[0]);
+            double[] labelOneHot = new double[10];
+            labelOneHot[labelInt] = 1;
+            double[] input = new double[parts.Length - 1];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                input[i - 1] = double.Parse(parts[i]) / 255f;
+            }
+            testSamples.Add(new Sample(input, labelOneHot));
+        }
+
+        // limit if needed
+        if (limit != -1)
+        {
+            trainSamples = trainSamples.Take(limit).ToList();
+            testSamples = testSamples.Take(limit).ToList();
+        }
+
+        // return dataset
+        return new Dataset("MNIST", trainSamples.ToArray(), testSamples.ToArray());
     }
 }

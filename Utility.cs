@@ -39,4 +39,14 @@
         }
         return error;
     }
+
+    public static double EuclideanDistance(double[] a, double[] b)
+    {
+        double distance = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            distance += Math.Pow(a[i] - b[i], 2);
+        }
+        return Math.Sqrt(distance);
+    }
 }

@@ -1,14 +1,20 @@
-﻿public class Program
+﻿using System.Data;
+
+public class Program
 {
     public static void Main(string[] args)
     {
         int maxK = 10;
-        double nudge = 0.01;
-        double requiredPassImprovement = 0.0005;
+        double nudge = 0.1;
+        double requiredPassImprovement = 0.0000001;
         List<Dataset> datasets = new List<Dataset>()
         {
-            Data.IRIS("./data/IRIS/iris.data"),
+            //Data.IRIS("./data/IRIS/iris.data"),
+            Data.MNIST("d:/data/mnist_train.csv", "d:/data/mnist_test.csv", 1000),
         };
+
+        // trying this out
+        NeighbourPool neighbourPool = new NeighbourPool(datasets[0]);
 
         foreach (Dataset dataset in datasets)
         {
@@ -67,6 +73,7 @@
                     }
                 }
 
+                
                 // iterate input weights
                 for (int inputIndex = 0; inputIndex < knnConfiguration.inputWeights.Length; inputIndex++)
                 {
@@ -83,7 +90,7 @@
                         }
                     }
                 }
-
+                /*
                 // iterate distance weights
                 for (int distanceIndex = 0; distanceIndex < knnConfiguration.distanceWeights.Length; distanceIndex++)
                 {
@@ -100,6 +107,7 @@
                         }
                     }
                 }
+                */
 
                 // check the pass improvement
                 double passEndFitness = fitness.absoluteErrorAverageTrain;

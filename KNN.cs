@@ -29,7 +29,7 @@
             for (int inputIndex = 0; inputIndex < trainInput.Length; inputIndex++)
             {
                 // we start with a bias distance of 1 between all inputs (creates a leverage for exponents and weights, even for identical inputs)
-                double inputDistance = 1.0;
+                double inputDistance = knnConfiguration.inputDistanceBias;
 
                 // next we add the absolute difference between the inputs (absolute so its always positive, and can be raised to any power)
                 inputDistance += Math.Abs(trainInput[inputIndex] - testInput[inputIndex]);
@@ -37,18 +37,12 @@
                 // then we raise the input distance to the distance exponent (allowing for an emphasis on closer or further distances)
                 inputDistance = Math.Pow(inputDistance, knnConfiguration.distanceExponent);
 
-                // finally we multiply the input distance by the input weight (allowing for some inputs to be more important than others)
-                inputDistance *= knnConfiguration.inputWeights[inputIndex];
-
                 // this is added to the total distance
                 distance += inputDistance;
             }
 
             // first we take the specified root of the distance (this is different than the distance exponent, to allow a different compression of the distance)
             distance = Math.Pow(distance, 1f / knnConfiguration.distanceRoot);
-
-            // then finally we multiply by the distance weight for this train sample (this allows demotion or promotion of certain samples)
-            distance *= knnConfiguration.distanceWeights[trainIndex];
 
             // store the train index, sample, and distance
             neighbour.index = trainIndex;
@@ -84,8 +78,23 @@
                     throw new Exception("K value too high for KNN, not enough neighbours to consider");
                 }
 
-                // calculate the weight of this neighbour, the max distance will be 1, and closer distances will be relatively higher than 1
-                double weight = maxDistance / kNeighbour.distance;
+                // calculate the weight
+                double weight;
+
+                switch (knnConfiguration.aggregation)
+                {
+                    case KNNConfiguration.Aggregation.Flat:
+                        weight = 1.0;
+                        break;
+                    case KNNConfiguration.Aggregation.InverseNormal:
+                        weight = maxDistance / (kNeighbour.distance + KNNConfiguration.EPSILON);
+                        break;
+                    case KNNConfiguration.Aggregation.Reciprocal:
+                        weight = 1.0 / (kNeighbour.distance + KNNConfiguration.EPSILON);
+                        break;
+                    default:
+                        throw new Exception("Unknown aggregation type");
+                }
 
                 // we then exponentiate the weight to shape the falloff of neighbour influence (more exponent means closer neighbours matter more)
                 weight = Math.Pow(weight, knnConfiguration.weightExponent);

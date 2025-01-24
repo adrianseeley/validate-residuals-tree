@@ -1,6 +1,4 @@
-﻿using System.Data;
-
-public class Program
+﻿public class Program
 {
     public static void Main(string[] args)
     {
@@ -13,8 +11,6 @@ public class Program
             Data.MNIST("d:/data/mnist_train.csv", "d:/data/mnist_test.csv", 1000),
         };
 
-        // trying this out
-        NeighbourPool neighbourPool = new NeighbourPool(datasets[0]);
 
         foreach (Dataset dataset in datasets)
         {

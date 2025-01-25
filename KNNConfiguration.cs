@@ -10,21 +10,47 @@
     }
 
     public int maxK;
-    public double inputDistanceBias;
-    public double distanceExponent;
-    public double distanceRoot;
-    public double weightExponent;
-    public Aggregation aggregation;
+
+    public double inputDistanceBiasMin;
+    public double inputDistanceBiasMax;
+    public double inputDistanceBiasStep;
+
+    public double distanceExponentMin;
+    public double distanceExponentMax;
+    public double distanceExponentStep;
+
+    public double distanceRootMin;
+    public double distanceRootMax;
+    public double distanceRootStep;
+
+    public double weightExponentMin;
+    public double weightExponentMax;
+    public double weightExponentStep;
+
+    public Aggregation[] aggregations;
     public Neighbour[] neighbours;
 
-    public KNNConfiguration(Dataset dataset, int maxK)
+    public KNNConfiguration(Dataset dataset, int maxK, double inputDistanceBiasMin, double inputDistanceBiasMax, double inputDistanceBiasStep, double distanceExponentMin, double distanceExponentMax, double distanceExponentStep, double distanceRootMin, double distanceRootMax, double distanceRootStep, double weightExponentMin, double weightExponentMax, double weightExponentStep)
     {
         this.maxK = maxK;
-        this.inputDistanceBias = 0.0;
-        this.distanceExponent = 1.0;
-        this.distanceRoot = 1.0;
-        this.weightExponent = 1.0;
-        this.aggregation = Aggregation.Flat;
+
+        this.inputDistanceBiasMin = inputDistanceBiasMin;
+        this.inputDistanceBiasMax = inputDistanceBiasMax;
+        this.inputDistanceBiasStep = inputDistanceBiasStep;
+
+        this.distanceExponentMin = distanceExponentMin;
+        this.distanceExponentMax = distanceExponentMax;
+        this.distanceExponentStep = distanceExponentStep;
+
+        this.distanceRootMin = distanceRootMin;
+        this.distanceRootMax = distanceRootMax;
+        this.distanceRootStep = distanceRootStep;
+
+        this.weightExponentMin = weightExponentMin;
+        this.weightExponentMax = weightExponentMax;
+        this.weightExponentStep = weightExponentStep;
+
+        this.aggregations = [Aggregation.Flat, Aggregation.InverseNormal, Aggregation.Reciprocal];
         this.neighbours = Enumerable.Range(0, dataset.train.Length).Select(trainIndex => new Neighbour()).ToArray();
     }
 }

@@ -11,9 +11,9 @@
 
     public int maxK;
 
-    public double inputDistanceBiasMin;
-    public double inputDistanceBiasMax;
-    public double inputDistanceBiasStep;
+    public double distanceBiasMin;
+    public double distanceBiasMax;
+    public double distanceBiasStep;
 
     public double distanceExponentMin;
     public double distanceExponentMax;
@@ -30,13 +30,13 @@
     public Aggregation[] aggregations;
     public Neighbour[] neighbours;
 
-    public KNNConfiguration(Dataset dataset, int maxK, double inputDistanceBiasMin, double inputDistanceBiasMax, double inputDistanceBiasStep, double distanceExponentMin, double distanceExponentMax, double distanceExponentStep, double distanceRootMin, double distanceRootMax, double distanceRootStep, double weightExponentMin, double weightExponentMax, double weightExponentStep)
+    public KNNConfiguration(Dataset dataset, int maxK, double distanceBiasMin, double distanceBiasMax, double distanceBiasStep, double distanceExponentMin, double distanceExponentMax, double distanceExponentStep, double distanceRootMin, double distanceRootMax, double distanceRootStep, double weightExponentMin, double weightExponentMax, double weightExponentStep)
     {
         this.maxK = maxK;
 
-        this.inputDistanceBiasMin = inputDistanceBiasMin;
-        this.inputDistanceBiasMax = inputDistanceBiasMax;
-        this.inputDistanceBiasStep = inputDistanceBiasStep;
+        this.distanceBiasMin = distanceBiasMin;
+        this.distanceBiasMax = distanceBiasMax;
+        this.distanceBiasStep = distanceBiasStep;
 
         this.distanceExponentMin = distanceExponentMin;
         this.distanceExponentMax = distanceExponentMax;

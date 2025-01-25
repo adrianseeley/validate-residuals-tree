@@ -5,13 +5,13 @@
         Scores scores = new Scores();
         List<(Sample[] samples, int[] samplesArgmax, bool isTrain)> sets = new List<(Sample[] samples, int[] samplesArgmax, bool isTrain)> { (dataset.train, dataset.trainArgmax, true), (dataset.test, dataset.testArgmax, false) };
 
-        for (double inputDistanceBias = knnConfiguration.inputDistanceBiasMin; inputDistanceBias <= knnConfiguration.inputDistanceBiasMax; inputDistanceBias += knnConfiguration.inputDistanceBiasStep)
+        for (double distanceBias = knnConfiguration.distanceBiasMin; distanceBias <= knnConfiguration.distanceBiasMax; distanceBias += knnConfiguration.distanceBiasStep)
         {
             for (double distanceExponent = knnConfiguration.distanceExponentMin; distanceExponent <= knnConfiguration.distanceExponentMax; distanceExponent += knnConfiguration.distanceExponentStep)
             {
                 for (double distanceRoot = knnConfiguration.distanceRootMin; distanceRoot <= knnConfiguration.distanceRootMax; distanceRoot += knnConfiguration.distanceRootStep)
                 {
-                    Console.Write($"\rinputDistanceBias: {inputDistanceBias}/{knnConfiguration.inputDistanceBiasMax}, distanceExponent: {distanceExponent}/{knnConfiguration.distanceExponentMax}, distanceRoot: {distanceRoot}/{knnConfiguration.distanceRootMax}        ");
+                    Console.Write($"\rinputDistanceBias: {distanceBias}/{knnConfiguration.distanceBiasMax}, distanceExponent: {distanceExponent}/{knnConfiguration.distanceExponentMax}, distanceRoot: {distanceRoot}/{knnConfiguration.distanceRootMax}        ");
                     foreach ((Sample[] samples, int[] samplesArgmax, bool isTrain) set in sets)
                     {
                         for (int sampleIndex = 0; sampleIndex < set.samples.Length; sampleIndex++)
@@ -42,11 +42,11 @@
                                 double[] trainInput = dataset.train[trainIndex].input;
 
                                 // compute the distance between the test and train inputs
-                                double distance = 0f;
+                                double distance = distanceBias;
                                 for (int inputIndex = 0; inputIndex < trainInput.Length; inputIndex++)
                                 {
                                     // we start with a bias distance of 1 between all inputs (creates a leverage for exponents and weights, even for identical inputs)
-                                    double inputDistance = inputDistanceBias;
+                                    double inputDistance = 0;
 
                                     // next we add the absolute difference between the inputs (absolute so its always positive, and can be raised to any power)
                                     inputDistance += Math.Abs(trainInput[inputIndex] - testInput[inputIndex]);
@@ -144,7 +144,7 @@
                                         // if correct
                                         if (resultArgmax == correctArgmax)
                                         {
-                                            scores.Tally(k, inputDistanceBias, distanceExponent, distanceRoot, weightExponent, aggregation, set.isTrain);
+                                            scores.Tally(k, distanceBias, distanceExponent, distanceRoot, weightExponent, aggregation, set.isTrain);
                                         }
                                     }
                                 }
